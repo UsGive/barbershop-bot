@@ -50,11 +50,20 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🧔 Наши барберы":
         keyboard = [[KeyboardButton(name)] for name in BARBERS.keys()]
         await update.message.reply_text("Выберите барбера:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-    elif text in BARBERS:
+        elif text in BARBERS:
         barber = BARBERS[text]
         with open(f"{barber['photo']}", "rb") as photo:
-            await update.message.reply_photo(photo=photo, caption=barber["profile"])
-    elif text == "💼 Услуги и цены":
+            await update.message.reply_photo(
+                photo=photo,
+                caption=barber["profile"]
+            )
+        # Показываем меню после профиля
+        await update.message.reply_text(
+            "Вы можете выбрать следующее действие:",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+        )
+
+elif text == "💼 Услуги и цены":
         await update.message.reply_text("💇 Стрижка – 700\n🧔 Оформление бороды – 500\n💆 Полный комплекс – 1100")
     elif text == "📍 Контакты":
         await update.message.reply_text("📍 ул. Барберская, 123\n📞 +996 (555) 23-45-67\n🕒 Режим работы: 10:00 – 20:00")
