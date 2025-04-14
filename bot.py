@@ -1,7 +1,7 @@
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, ConversationHandler, CallbackQueryHandler
 import os
 from dotenv import load_dotenv
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, ConversationHandler, CallbackQueryHandler
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -16,6 +16,9 @@ MAIN_MENU = [
     [KeyboardButton("💼 Услуги и цены")],
     [KeyboardButton("📍 Контакты")]
 ]
+
+# Доступные временные слоты
+TIME_SLOTS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"]
 
 # Барберы и их профили
 BARBERS = {
@@ -83,7 +86,8 @@ async def type_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Дата
 async def choose_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['date'] = update.message.text
-    await update.message.reply_text("Выберите время (например, 14:30):")
+    keyboard = [[KeyboardButton(time)] for time in TIME_SLOTS]
+    await update.message.reply_text("Выберите время:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
     return CHOOSING_TIME
 
 # Время и финальное подтверждение
