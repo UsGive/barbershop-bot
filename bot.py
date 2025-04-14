@@ -1,7 +1,7 @@
-import os
-from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, ConversationHandler, CallbackQueryHandler
+import os
+from dotenv import load_dotenv
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -17,26 +17,23 @@ MAIN_MENU = [
     [KeyboardButton("📍 Контакты")]
 ]
 
-# Доступные временные слоты
-TIME_SLOTS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"]
-
 # Барберы и их профили
 BARBERS = {
     "Ира": {
-        "photo": "photos/ira.jpg",
+        "photo": "ira.jpg",
         "profile": "✂️ Ира — специалист по классическим мужским и женским стрижкам. 5 лет опыта, внимательная к деталям и вежливая."
     },
     "Аман": {
-        "photo": "photos/aman.jpg",
+        "photo": "aman.jpg",
         "profile": "💈 Аман — мастер фейдов и современных укладок. 4 года в профессии, стильный и профессиональный."
     },
     "Олег": {
-        "photo": "photos/oleg.jpg",
+        "photo": "oleg.jpg",
         "profile": "🧔 Олег — эксперт по уходу за бородой и коротким стрижкам. Более 6 лет опыта. Работает быстро и качественно."
     }
 }
 
-# Начало работы
+# Стартовое сообщение
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Добро пожаловать в BarberBot 💈",
@@ -50,23 +47,19 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🧔 Наши барберы":
         keyboard = [[KeyboardButton(name)] for name in BARBERS.keys()]
         await update.message.reply_text("Выберите барбера:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-        elif text in BARBERS:
+
+    elif text in BARBERS:
         barber = BARBERS[text]
         with open(f"{barber['photo']}", "rb") as photo:
-            await update.message.reply_photo(
-                photo=photo,
-                caption=barber["profile"]
-            )
-        # Показываем меню после профиля
-        await update.message.reply_text(
-            "Вы можете выбрать следующее действие:",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
-        )
+            await update.message.reply_photo(photo=photo, caption=barber["profile"])
+        await update.message.reply_text("Выберите действие из меню:", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
 
-elif text == "💼 Услуги и цены":
+    elif text == "💼 Услуги и цены":
         await update.message.reply_text("💇 Стрижка – 700\n🧔 Оформление бороды – 500\n💆 Полный комплекс – 1100")
+
     elif text == "📍 Контакты":
         await update.message.reply_text("📍 ул. Барберская, 123\n📞 +996 (555) 23-45-67\n🕒 Режим работы: 10:00 – 20:00")
+
     elif text == "💈 Записаться":
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in BARBERS.keys()]
         await update.message.reply_text("Выберите барбера:", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -95,7 +88,8 @@ async def type_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Дата
 async def choose_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['date'] = update.message.text
-    keyboard = [[KeyboardButton(time)] for time in TIME_SLOTS]
+    times = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00"]
+    keyboard = [[KeyboardButton(t)] for t in times]
     await update.message.reply_text("Выберите время:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
     return CHOOSING_TIME
 
