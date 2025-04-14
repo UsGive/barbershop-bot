@@ -1,4 +1,4 @@
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, ConversationHandler, CallbackQueryHandler
 import os
 from dotenv import load_dotenv
@@ -25,7 +25,7 @@ BARBERS = {
     },
     "Аман": {
         "photo": "aman.jpg",
-        "profile": "💈 Аман — мастер фейдов и современных укладок. 4 года в профессии, стильный и профессиональный."
+        "profile": "💈 Аман — мастер фейдов и современных укладок. 4 года в професссии, стильный и профессиональный."
     },
     "Олег": {
         "photo": "oleg.jpg",
@@ -33,7 +33,7 @@ BARBERS = {
     }
 }
 
-# Стартовое сообщение
+# Начало работы
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Добро пожаловать в BarberBot 💈",
@@ -47,19 +47,15 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🧔 Наши барберы":
         keyboard = [[KeyboardButton(name)] for name in BARBERS.keys()]
         await update.message.reply_text("Выберите барбера:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-
     elif text in BARBERS:
         barber = BARBERS[text]
-        with open(f"{barber['photo']}", "rb") as photo:
+        with open(barber['photo'], "rb") as photo:
             await update.message.reply_photo(photo=photo, caption=barber["profile"])
-        await update.message.reply_text("Выберите действие из меню:", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
-
+        await update.message.reply_text("Назад в меню:", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
     elif text == "💼 Услуги и цены":
         await update.message.reply_text("💇 Стрижка – 700\n🧔 Оформление бороды – 500\n💆 Полный комплекс – 1100")
-
     elif text == "📍 Контакты":
         await update.message.reply_text("📍 ул. Барберская, 123\n📞 +996 (555) 23-45-67\n🕒 Режим работы: 10:00 – 20:00")
-
     elif text == "💈 Записаться":
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in BARBERS.keys()]
         await update.message.reply_text("Выберите барбера:", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -70,7 +66,7 @@ async def choose_barber_callback(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     await query.answer()
     context.user_data['barber'] = query.data
-    await query.message.reply_text("Введите ваше имя:")
+    await query.message.reply_text("Введите ваше имя:", reply_markup=ReplyKeyboardRemove())
     return TYPING_NAME
 
 # Имя клиента
@@ -88,7 +84,7 @@ async def type_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Дата
 async def choose_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['date'] = update.message.text
-    times = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00"]
+    times = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"]
     keyboard = [[KeyboardButton(t)] for t in times]
     await update.message.reply_text("Выберите время:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
     return CHOOSING_TIME
@@ -131,4 +127,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
