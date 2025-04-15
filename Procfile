@@ -1,1 +1,1 @@
-worker: python bot.py
+barbershop: python bot.py
