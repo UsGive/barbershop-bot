@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputMediaPhoto
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 # Загрузка токена из .env
@@ -15,8 +15,24 @@ MAIN_MENU = [
     [KeyboardButton("📍 Адрес и контакты")]
 ]
 
-# Варианты барберов
-BARBERS = ["Ира", "Аман", "Олег"]
+# Варианты барберов и их профили
+BARBERS = {
+    "Ира": {
+        "photo": "media/ira.jpg",
+        "video": "media/ira.mp4",
+        "description": "✂️ Ира — специалист по классическим мужским и женским стрижкам. 5 лет опыта, внимательная к деталям и вежливая."
+    },
+    "Аман": {
+        "photo": "media/aman.jpg",
+        "video": "media/aman.mp4",
+        "description": "💈 Аман — мастер фейдов и современных укладок. 4 года в профессии, стильный и профессиональный."
+    },
+    "Олег": {
+        "photo": "media/oleg.jpg",
+        "video": "media/oleg.mp4",
+        "description": "🧔 Олег — эксперт по уходу за бородой и коротким стрижкам. Более 6 лет опыта. Работает быстро и качественно."
+    }
+}
 
 # Варианты времени
 TIME_OPTIONS = ["10:00", "11:00", "12:00", "13:00", "14:00"]
@@ -27,7 +43,7 @@ user_state = {}
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_state[user_id] = {"step": None}
+    user_state[user_id] = {"booking": None, "step": None}
     await update.message.reply_text(
         "Добро пожаловать в BarberBot 💈",
         reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
@@ -38,27 +54,24 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = update.effective_user.id
 
-    state = user_state.get(user_id, {})
-    step = state.get("step")
-
     if text == "💈 Записаться на стрижку":
         user_state[user_id] = {"step": "choose_barber"}
         await update.message.reply_text(
             "Выберите барбера:",
-            reply_markup=ReplyKeyboardMarkup([[b] for b in BARBERS], resize_keyboard=True)
+            reply_markup=ReplyKeyboardMarkup([[b] for b in BARBERS.keys()], resize_keyboard=True)
         )
 
-    elif step == "choose_barber" and text in BARBERS:
+    elif text in BARBERS and user_state.get(user_id, {}).get("step") == "choose_barber":
         user_state[user_id]["barber"] = text
-        user_state[user_id]["step"] = "enter_name"
+        user_state[user_id]["step"] = "type_name"
         await update.message.reply_text("Введите ваше имя:")
 
-    elif step == "enter_name":
+    elif user_state.get(user_id, {}).get("step") == "type_name":
         user_state[user_id]["name"] = text
-        user_state[user_id]["step"] = "enter_date"
+        user_state[user_id]["step"] = "type_date"
         await update.message.reply_text("Введите дату записи (например, 15 апреля):")
 
-    elif step == "enter_date":
+    elif user_state.get(user_id, {}).get("step") == "type_date":
         user_state[user_id]["date"] = text
         user_state[user_id]["step"] = "choose_time"
         await update.message.reply_text(
@@ -66,35 +79,40 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardMarkup([[t] for t in TIME_OPTIONS], resize_keyboard=True)
         )
 
-    elif step == "choose_time" and text in TIME_OPTIONS:
+    elif text in TIME_OPTIONS and user_state.get(user_id, {}).get("step") == "choose_time":
         user_state[user_id]["time"] = text
-        user_state[user_id]["step"] = "enter_phone"
+        user_state[user_id]["step"] = "type_phone"
         await update.message.reply_text("Введите ваш номер телефона (в формате 555 78 22 33):")
 
-    elif step == "enter_phone":
-        if not text.replace(" ", "").isdigit() or len(text.replace(" ", "")) != 9:
+    elif user_state.get(user_id, {}).get("step") == "type_phone":
+        if len(text.split()) == 4 and all(part.isdigit() for part in text.split()):
+            user_state[user_id]["phone"] = text
+            d = user_state[user_id]
+            await update.message.reply_text(
+                f"✅ Запись подтверждена!\nБарбер: {d['barber']}\nИмя: {d['name']}\nДата: {d['date']}\nВремя: {d['time']}\nТелефон: {d['phone']}\n\nДо встречи! 💈",
+                reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+            )
+            user_state[user_id] = {"step": None}  # сброс
+        else:
             await update.message.reply_text("Пожалуйста, введите номер в правильном формате (555 78 22 33):")
-            return
-        user_state[user_id]["phone"] = text
-        d = user_state[user_id]
-        await update.message.reply_text(
-            f"✅ Запись подтверждена!\nБарбер: {d['barber']}\nИмя: {d['name']}\nДата: {d['date']}\nВремя: {d['time']}\nТелефон: {d['phone']}\n\nДо встречи! 💈",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
-        )
-        user_state[user_id] = {"step": None}
 
     elif text == "🧔 Наши барберы":
         await update.message.reply_text(
             "Выберите барбера:",
-            reply_markup=ReplyKeyboardMarkup([[b] for b in BARBERS] + [["⬅️ Вернуться в меню"]], resize_keyboard=True)
+            reply_markup=ReplyKeyboardMarkup([[name] for name in BARBERS.keys()] + [["⬅️ Вернуться в меню"]], resize_keyboard=True)
         )
 
-    elif text == "Ира":
-        await send_barber_profile(update, "ira.jpg", "✂️ Ира — специалист по классическим мужским и женским стрижкам. 5 лет опыта, внимательная к деталям и вежливая.", "video/ira.mp4")
-    elif text == "Аман":
-        await send_barber_profile(update, "aman.jpg", "💈 Аман — мастер фейдов и современных укладок. 4 года в профессии, стильный и профессиональный.", "video/aman.mp4")
-    elif text == "Олег":
-        await send_barber_profile(update, "oleg.jpg", "🧔 Олег — эксперт по уходу за бородой и коротким стрижкам. Более 6 лет опыта. Работает быстро и качественно.", "video/oleg.mp4")
+    elif text in BARBERS:
+        barber = BARBERS[text]
+        try:
+            with open(barber["photo"], "rb") as photo_file:
+                await update.message.reply_photo(photo=photo_file, caption=barber["description"])
+            with open(barber["video"], "rb") as video_file:
+                await update.message.reply_video(video=video_file)
+        except Exception as e:
+            await update.message.reply_text(f"Ошибка при загрузке медиа: {e}")
+        await update.message.reply_text("⬅️ Вернуться в меню", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
+
     elif text == "⬅️ Вернуться в меню":
         await update.message.reply_text("Главное меню:", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
 
@@ -110,18 +128,6 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     else:
         await update.message.reply_text("Пожалуйста, выберите вариант из меню.", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
-
-# Отправка фото, текста и видео
-async def send_barber_profile(update: Update, photo_path: str, profile_text: str, video_path: str):
-    chat_id = update.effective_chat.id
-    try:
-        with open(photo_path, "rb") as photo:
-            await update.message.bot.send_photo(chat_id=chat_id, photo=photo, caption=f"🖼 {profile_text}")
-        with open(video_path, "rb") as video:
-            await update.message.bot.send_video(chat_id=chat_id, video=video)
-    except Exception as e:
-        await update.message.reply_text(f"Ошибка при загрузке медиа: {e}")
-    await update.message.reply_text("⬅️ Вернуться в меню", reply_markup=ReplyKeyboardMarkup([["⬅️ Вернуться в меню"]], resize_keyboard=True))
 
 # Запуск бота
 def main():
