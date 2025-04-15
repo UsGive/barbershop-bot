@@ -16,7 +16,23 @@ MAIN_MENU = [
 ]
 
 # Варианты барберов
-BARBERS = ["Ира ✂️", "Аман 💈", "Олег 💬"]
+BARBERS = {
+    "Ира": {
+        "photo": "media/ira.jpg",
+        "video": "media/ira.mp4",
+        "desc": "✂️ Ира — специалист по классическим мужским и женским стрижкам. 5 лет опыта, внимательная к деталям и вежливая."
+    },
+    "Аман": {
+        "photo": "media/aman.jpg",
+        "video": "media/aman.mp4",
+        "desc": "💈 Аман — мастер фейдов и современных укладок. 4 года в профессии, стильный и профессиональный."
+    },
+    "Олег": {
+        "photo": "media/oleg.jpg",
+        "video": "media/oleg.mp4",
+        "desc": "🧔 Олег — эксперт по уходу за бородой и коротким стрижкам. Более 6 лет опыта. Работает быстро и качественно."
+    }
+}
 
 # Варианты времени
 TIME_OPTIONS = ["10:00", "11:00", "12:00", "13:00", "14:00"]
@@ -42,7 +58,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_state[user_id] = {"step": "choose_barber"}
         await update.message.reply_text(
             "Выберите барбера:",
-            reply_markup=ReplyKeyboardMarkup([[b] for b in BARBERS], resize_keyboard=True)
+            reply_markup=ReplyKeyboardMarkup([[name] for name in BARBERS], resize_keyboard=True)
         )
 
     elif text in BARBERS and user_state.get(user_id, {}).get("step") == "choose_barber":
@@ -63,9 +79,16 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_state[user_id] = {}  # сброс
 
     elif text == "🧔 Наши барберы":
-        await update.message.reply_text(
-            "Наши мастера:\n1. Ира ✂️\n2. Аман 💈\n3. Олег 💬"
-        )
+        keyboard = [[name] for name in BARBERS]
+        await update.message.reply_text("Выберите барбера:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+
+    elif text in BARBERS:
+        barber = BARBERS[text]
+        with open(barber["photo"], "rb") as photo:
+            await update.message.reply_photo(photo=photo, caption=barber["desc"])
+        with open(barber["video"], "rb") as video:
+            await update.message.reply_video(video=video)
+        await update.message.reply_text("⬅️ Вернуться в меню", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
 
     elif text == "💼 Услуги и цены":
         await update.message.reply_text(
@@ -78,15 +101,17 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     else:
-        await update.message.reply_text("Пожалуйста, выберите вариант из меню.")
+        await update.message.reply_text(
+            "Пожалуйста, выберите вариант из меню.",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+        )
 
 # Запуск бота
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_menu))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu))
     app.run_polling()
 
 if __name__ == "__main__":
     main()
-
