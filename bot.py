@@ -1,12 +1,13 @@
 import os
-import re
 from dotenv import load_dotenv
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, ConversationHandler, CallbackQueryHandler
 
-# Загрузка токена из .env
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# Состояния для формы записи
+CHOOSING_BARBER, TYPING_NAME, TYPING_PHONE, CHOOSING_DATE, CHOOSING_TIME = range(5)
 
 # Главное меню
 MAIN_MENU = [
@@ -16,35 +17,33 @@ MAIN_MENU = [
     [KeyboardButton("📍 Адрес и контакты")]
 ]
 
-# Варианты барберов и их профили
+# Барберы и их профили
 BARBERS = {
-    "Ира ✂️": {
-        "photo": "photos/ira.jpg",
-        "video": "videos/ira.mp4",
+    "Ира": {
+        "photo": "ira.jpg",
+        "video": "video/ira.mp4",
         "profile": "✂️ Ира — специалист по классическим мужским и женским стрижкам. 5 лет опыта, внимательная к деталям и вежливая."
     },
-    "Аман 💈": {
-        "photo": "photos/aman.jpg",
-        "video": "videos/aman.mp4",
+    "Аман": {
+        "photo": "aman.jpg",
+        "video": "video/aman.mp4",
         "profile": "💈 Аман — мастер фейдов и современных укладок. 4 года в профессии, стильный и профессиональный."
     },
-    "Олег 💬": {
-        "photo": "photos/oleg.jpg",
-        "video": "videos/oleg.mp4",
+    "Олег": {
+        "photo": "oleg.jpg",
+        "video": "video/oleg.mp4",
         "profile": "🧔 Олег — эксперт по уходу за бородой и коротким стрижкам. Более 6 лет опыта. Работает быстро и качественно."
     }
 }
 
-# Варианты времени
-TIME_OPTIONS = ["10:00", "11:00", "12:00", "13:00", "14:00"]
-
-# Состояния пользователя
 user_state = {}
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_state[user_id] = {"booking": None, "step": None}
+    if user_state.get(user_id, {}).get("started"):
+        return
+    user_state[user_id] = {"booking": None, "started": True}
     await update.message.reply_text(
         "Добро пожаловать в BarberBot 💈",
         reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
@@ -54,66 +53,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = update.effective_user.id
-    state = user_state.get(user_id, {})
 
-    # Этап записи
     if text == "💈 Записаться на стрижку":
-        user_state[user_id] = {"step": "choose_barber"}
-        await update.message.reply_text(
-            "Выберите барбера:",
-            reply_markup=ReplyKeyboardMarkup([[name] for name in BARBERS.keys()], resize_keyboard=True)
-        )
+        keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in BARBERS.keys()]
+        await update.message.reply_text("Выберите барбера:", reply_markup=InlineKeyboardMarkup(keyboard))
+        return CHOOSING_BARBER
 
-    elif text in BARBERS and state.get("step") == "choose_barber":
-        user_state[user_id]["barber"] = text
-        user_state[user_id]["step"] = "enter_name"
-        await update.message.reply_text("Введите ваше имя:")
-
-    elif state.get("step") == "enter_name":
-        user_state[user_id]["name"] = text
-        user_state[user_id]["step"] = "enter_date"
-        await update.message.reply_text("Введите дату записи (например, 15 апреля):")
-
-    elif state.get("step") == "enter_date":
-        user_state[user_id]["date"] = text
-        user_state[user_id]["step"] = "choose_time"
-        await update.message.reply_text(
-            "Выберите время:",
-            reply_markup=ReplyKeyboardMarkup([[t] for t in TIME_OPTIONS], resize_keyboard=True)
-        )
-
-    elif text in TIME_OPTIONS and state.get("step") == "choose_time":
-        user_state[user_id]["time"] = text
-        user_state[user_id]["step"] = "enter_phone"
-        await update.message.reply_text("Введите ваш номер телефона (в формате 555 78 22 33):")
-
-    elif state.get("step") == "enter_phone":
-        phone_pattern = r"^\d{3} \d{2} \d{2} \d{2}$"
-        if not re.match(phone_pattern, text):
-            await update.message.reply_text("Пожалуйста, введите номер в формате 555 78 22 33:")
-            return
-        user_state[user_id]["phone"] = text
-        d = user_state[user_id]
-        await update.message.reply_text(
-            f"✅ Запись подтверждена!\nБарбер: {d['barber']}\nИмя: {d['name']}\nДата: {d['date']}\nВремя: {d['time']}\nТелефон: {d['phone']}\n\nДо встречи! 💈",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
-        )
-        user_state[user_id] = {}
-
-    # Показ барберов
     elif text == "🧔 Наши барберы":
-        await update.message.reply_text(
-            "Выберите барбера:",
-            reply_markup=ReplyKeyboardMarkup([[name] for name in BARBERS.keys()], resize_keyboard=True)
-        )
+        keyboard = [[KeyboardButton(name)] for name in BARBERS.keys()]
+        await update.message.reply_text("Выберите барбера:", reply_markup=ReplyKeyboardMarkup(keyboard + MAIN_MENU, resize_keyboard=True))
 
     elif text in BARBERS:
         barber = BARBERS[text]
-        with open(barber["photo"], "rb") as photo:
+        with open(barber['photo'], 'rb') as photo:
             await update.message.reply_photo(photo=photo, caption=barber["profile"])
-        video_path = barber.get("video")
-        if video_path and os.path.exists(video_path):
-            with open(video_path, "rb") as video:
+        if os.path.exists(barber['video']):
+            with open(barber['video'], 'rb') as video:
                 await update.message.reply_video(video=video)
 
     elif text == "💼 Услуги и цены":
@@ -125,17 +80,71 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "📍 ул. Барберская, 123\n📞 +996 (555) 23-45-67\n🕒 Режим работы: 10:00 – 20:00"
         )
-
     else:
-        await update.message.reply_text("Пожалуйста, выберите вариант из меню.")
+        await update.message.reply_text("Пожалуйста, выберите вариант из меню.", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
 
-# Запуск бота
+# Запись: выбор барбера
+async def choose_barber_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data['barber'] = query.data
+    await query.message.reply_text("Введите ваше имя:")
+    return TYPING_NAME
+
+# Имя клиента
+async def type_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['name'] = update.message.text
+    await update.message.reply_text("Введите ваш номер телефона (в формате 555 78 22 33):")
+    return TYPING_PHONE
+
+# Телефон клиента
+async def type_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['phone'] = update.message.text
+    await update.message.reply_text("Введите дату записи (например, 15 апреля):")
+    return CHOOSING_DATE
+
+# Дата
+async def choose_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['date'] = update.message.text
+    await update.message.reply_text("Выберите время:", reply_markup=ReplyKeyboardMarkup([[t] for t in ["10:00", "11:00", "12:00", "13:00", "14:00"]], resize_keyboard=True))
+    return CHOOSING_TIME
+
+# Время и подтверждение
+async def choose_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['time'] = update.message.text
+    d = context.user_data
+    await update.message.reply_text(
+        f"✅ Запись подтверждена!\nБарбер: {d['barber']}\nИмя: {d['name']}\nДата: {d['date']}\nВремя: {d['time']}\nТелефон: {d['phone']}\n\nДо встречи! 💈",
+        reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+    )
+    return ConversationHandler.END
+
+# Отмена
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Запись отменена.", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
+    return ConversationHandler.END
+
+# Главный запуск
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    conv_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^💈 Записаться на стрижку$"), handle_menu)],
+        states={
+            CHOOSING_BARBER: [CallbackQueryHandler(choose_barber_callback)],
+            TYPING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, type_name)],
+            TYPING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, type_phone)],
+            CHOOSING_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_date)],
+            CHOOSING_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_time)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)]
+    )
+
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.Regex("^/start$"), handle_menu))
+    app.add_handler(conv_handler)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu))
     app.run_polling()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
 
