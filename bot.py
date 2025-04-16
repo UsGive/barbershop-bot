@@ -1,4 +1,5 @@
 import os
+import asyncio
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputMediaPhoto
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
@@ -13,7 +14,7 @@ DATE_OPTIONS = [
 # Загрузка токена из .env
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-
+DATABASE_URL = os.getenv("DATABASE_URL")
 # Главное меню
 MAIN_MENU = [
     [KeyboardButton("💈 Записаться на стрижку")],
@@ -46,8 +47,29 @@ TIME_OPTIONS = ["10:00", "11:00", "12:00", "13:00", "14:00"]
 
 # Состояния пользователя
 user_state = {}
+async def init_db():
+    async def save_booking(user_id, barber, name, date, time, phone):
+        conn = await asyncpg.connect(DATABASE_URL)
+        await conn.execute('''
+            INSERT INTO bookings (user_id, barber, name, date, time, phone)
+            VALUES ($1, $2, $3, $4, $5, $6)
+        ''', user_id, barber, name, date, time, phone)
+        await conn.close()
+    conn = await asyncpg.connect(DATABASE_URL)
+    await conn.execute('''
+        CREATE TABLE IF NOT EXISTS bookings (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            barber TEXT,
+            name TEXT,
+            date TEXT,
+            time TEXT,
+            phone TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    await conn.close()
 
-# Команда /start
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("START TRIGGERED")  # для отладки в терминале
@@ -96,7 +118,6 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         )
-
 
     elif user_state.get(user_id, {}).get("step") == "choose_date":
 
@@ -160,18 +181,14 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                             reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
 
             # Сохранение данных в файл
-
-            with open("bookings.txt", "a", encoding="utf-8") as file:
-
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                file.write(f"{timestamp}, {d['barber']}, {d['name']}, {d['date']}, {d['time']}, {d['phone']}\n")
-
-            user_state[user_id] = {"step": None}  # сброс
-
-        else:
-
-            await update.message.reply_text("Пожалуйста, введите номер в правильном формате (555 78 22 33):")
+            await save_booking(
+                user_id=user_id,
+                barber=d['barber'],
+                name=d['name'],
+                date=d['date'],
+                time=d['time'],
+                phone=d['phone']
+            )
 
     elif text == "🧔 Наши барберы":
         await update.message.reply_text(
@@ -205,12 +222,38 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     else:
         await update.message.reply_text("Пожалуйста, выберите вариант из меню.", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
+async def init_db():
+    conn = await asyncpg.connect(DATABASE_URL)
+    await conn.execute('''
+        CREATE TABLE IF NOT EXISTS bookings (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            barber TEXT,
+            name TEXT,
+            date TEXT,
+            time TEXT,
+            phone TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    await conn.close()
+async def save_booking(user_id, barber, name, date, time, phone):
+    conn = await asyncpg.connect(DATABASE_URL)
+    await conn.execute('''
+        INSERT INTO bookings (user_id, barber, name, date, time, phone)
+        VALUES ($1, $2, $3, $4, $5, $6)
+    ''', user_id, barber, name, date, time, phone)
+    await conn.close()
 
 # Запуск бота
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_menu))
+
+    # Создание таблицы при старте
+    asyncio.run(init_db())
+
     app.run_polling()
 
 if __name__ == "__main__":
