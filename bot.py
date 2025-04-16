@@ -73,14 +73,17 @@ async def init_db():
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("START TRIGGERED")  # для отладки в терминале
+    print("START TRIGGERED")  # для логов Railway
+
     if update.message:
         user_id = update.effective_user.id
         user_state[user_id] = {"booking": None, "step": None}
+
         await update.message.reply_text(
             "Добро пожаловать в BarberBot 💈",
             reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
         )
+
 
 # Обработка текстовых сообщений
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
