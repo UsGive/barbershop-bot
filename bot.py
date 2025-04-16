@@ -247,14 +247,15 @@ async def save_booking(user_id, barber, name, date, time, phone):
     await conn.close()
 
 # Запуск бота
-async def run_bot():
-    await init_db()
+def main():
+    loop = asyncio.get_event_loop()
+
+    # Запускаем init_db в loop
+    loop.run_until_complete(init_db())
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_menu))
 
-    await app.run_polling()
-
-if __name__ == "__main__":
-    asyncio.run(run_bot())
+    # Запускаем бот (внутри его собственного цикла)
+    app.run_polling()
