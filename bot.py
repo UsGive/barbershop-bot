@@ -221,15 +221,19 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Пожалуйста, выберите вариант из меню.", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
 
 # Запуск бота
-async def run():
-    await init_db()
+def main():
+    async def runner():
+        await init_db()
 
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_menu))
+        app = ApplicationBuilder().token(BOT_TOKEN).build()
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_menu))
 
-    await app.run_polling()
+        await app.run_polling()
+
+    asyncio.run(runner())
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    main()
+
 
