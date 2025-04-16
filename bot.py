@@ -49,7 +49,6 @@ TIME_OPTIONS = ["10:00", "11:00", "12:00", "13:00", "14:00"]
 # Состояния пользователя
 user_state = {}
 async def init_db():
-    async def save_booking(user_id, barber, name, date, time, phone):
         conn = await asyncpg.connect(DATABASE_URL)
         await conn.execute('''
             INSERT INTO bookings (user_id, barber, name, date, time, phone)
