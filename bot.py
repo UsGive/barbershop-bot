@@ -2,6 +2,13 @@ import os
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputMediaPhoto
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from datetime import datetime, timedelta
+
+# Генерация списка дат на ближайшие 14 дней (в формате "ДД ММММ", например "16 апреля")
+DATE_OPTIONS = [
+    (datetime.now() + timedelta(days=i)).strftime("%d %B")
+    for i in range(14)
+]
 
 # Загрузка токена из .env
 load_dotenv()
@@ -41,13 +48,16 @@ TIME_OPTIONS = ["10:00", "11:00", "12:00", "13:00", "14:00"]
 user_state = {}
 
 # Команда /start
+# Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    user_state[user_id] = {"booking": None, "step": None}
-    await update.message.reply_text(
-        "Добро пожаловать в BarberBot 💈",
-        reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
-    )
+    print("START TRIGGERED")  # для отладки в терминале
+    if update.message:
+        user_id = update.effective_user.id
+        user_state[user_id] = {"booking": None, "step": None}
+        await update.message.reply_text(
+            "Добро пожаловать в BarberBot 💈",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+        )
 
 # Обработка текстовых сообщений
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -66,34 +76,101 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_state[user_id]["step"] = "type_name"
         await update.message.reply_text("Введите ваше имя:")
 
-    elif user_state.get(user_id, {}).get("step") == "type_name":
-        user_state[user_id]["name"] = text
-        user_state[user_id]["step"] = "type_date"
-        await update.message.reply_text("Введите дату записи (например, 15 апреля):")
 
-    elif user_state.get(user_id, {}).get("step") == "type_date":
-        user_state[user_id]["date"] = text
-        user_state[user_id]["step"] = "choose_time"
+    elif user_state.get(user_id, {}).get("step") == "type_name":
+
+        user_state[user_id]["name"] = text
+
+        user_state[user_id]["step"] = "choose_date"
+
         await update.message.reply_text(
-            "Выберите время:",
-            reply_markup=ReplyKeyboardMarkup([[t] for t in TIME_OPTIONS], resize_keyboard=True)
+
+            "Выберите дату записи:",
+
+            reply_markup=ReplyKeyboardMarkup(
+
+                [DATE_OPTIONS[i:i + 2] for i in range(0, len(DATE_OPTIONS), 2)],
+
+                resize_keyboard=True
+
+            )
+
         )
+
+
+    elif user_state.get(user_id, {}).get("step") == "choose_date":
+
+        if text in DATE_OPTIONS:
+
+            user_state[user_id]["date"] = text
+
+            user_state[user_id]["step"] = "choose_time"
+
+            await update.message.reply_text(
+
+                "Выберите время:",
+
+                reply_markup=ReplyKeyboardMarkup(
+
+                    [TIME_OPTIONS[i:i + 2] for i in range(0, len(TIME_OPTIONS), 2)],
+
+                    resize_keyboard=True
+
+                )
+
+            )
+
+        else:
+
+            await update.message.reply_text("Пожалуйста, выберите дату из предложенных вариантов.")
 
     elif text in TIME_OPTIONS and user_state.get(user_id, {}).get("step") == "choose_time":
         user_state[user_id]["time"] = text
         user_state[user_id]["step"] = "type_phone"
         await update.message.reply_text("Введите ваш номер телефона (в формате 555 78 22 33):")
 
+
     elif user_state.get(user_id, {}).get("step") == "type_phone":
+
         if len(text.split()) == 4 and all(part.isdigit() for part in text.split()):
+
             user_state[user_id]["phone"] = text
+
             d = user_state[user_id]
-            await update.message.reply_text(
-                f"✅ Запись подтверждена!\nБарбер: {d['barber']}\nИмя: {d['name']}\nДата: {d['date']}\nВремя: {d['time']}\nТелефон: {d['phone']}\n\nДо встречи! 💈",
-                reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+
+            confirmation_text = (
+
+                f"✅ Запись подтверждена!\n"
+
+                f"Барбер: {d['barber']}\n"
+
+                f"Имя: {d['name']}\n"
+
+                f"Дата: {d['date']}\n"
+
+                f"Время: {d['time']}\n"
+
+                f"Телефон: {d['phone']}\n\n"
+
+                f"До встречи! 💈"
+
             )
+
+            await update.message.reply_text(confirmation_text,
+                                            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
+
+            # Сохранение данных в файл
+
+            with open("bookings.txt", "a", encoding="utf-8") as file:
+
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                file.write(f"{timestamp}, {d['barber']}, {d['name']}, {d['date']}, {d['time']}, {d['phone']}\n")
+
             user_state[user_id] = {"step": None}  # сброс
+
         else:
+
             await update.message.reply_text("Пожалуйста, введите номер в правильном формате (555 78 22 33):")
 
     elif text == "🧔 Наши барберы":
@@ -138,4 +215,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
