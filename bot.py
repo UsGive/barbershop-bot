@@ -12,28 +12,28 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Главное меню
 MAIN_MENU = [
-    [KeyboardButton("\ud83d\udcbc \u0417\u0430\u043f\u0438\u0441\u0430\u0442\u044c\u0441\u044f \u043d\u0430 \u0441\u0442\u0440\u0438\u0436\u043a\u0443")],
-    [KeyboardButton("\ud83e\uddc4 \u041d\u0430\u0448\u0438 \u0431\u0430\u0440\u0431\u0435\u0440\u044b")],
-    [KeyboardButton("\ud83d\udcbc \u0423\u0441\u043b\u0443\u0433\u0438 \u0438 \u0446\u0435\u043d\u044b")],
-    [KeyboardButton("\ud83d\udccd \u0410\u0434\u0440\u0435\u0441 \u0438 \u043a\u043e\u043d\u0442\u0430\u043a\u0442\u044b")]
+    [KeyboardButton("💈 Записаться на стрижку")],
+    [KeyboardButton("🧔 Наши барберы")],
+    [KeyboardButton("💼 Услуги и цены")],
+    [KeyboardButton("📍 Адрес и контакты")]
 ]
 
 # Барберы
 BARBERS = {
-    "\u0418\u0440\u0430": {
+    "Ира": {
         "photo": "media/ira.jpg",
         "video": "media/ira.mp4",
-        "description": "\u2702\ufe0f \u0418\u0440\u0430 \u2014 \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u0438\u0441\u0442 \u043f\u043e \u043a\u043b\u0430\u0441\u0441\u0438\u0447\u0435\u0441\u043a\u0438\u043c \u0441\u0442\u0440\u0438\u0436\u043a\u0430\u043c."
+        "description": "✂️ Ира — специалист по классическим стрижкам."
     },
-    "\u0410\u043c\u0430\u043d": {
+    "Аман": {
         "photo": "media/aman.jpg",
         "video": "media/aman.mp4",
-        "description": "\ud83d\udcbc \u0410\u043c\u0430\u043d \u2014 \u043c\u0430\u0441\u0442\u0435\u0440 \u0444\u0435\u0439\u0434\u043e\u0432 \u0438 \u0443\u043a\u043b\u0430\u0434\u043e\u043a."
+        "description": "💈 Аман — мастер фейдов и укладок."
     },
-    "\u041e\u043b\u0435\u0433": {
+    "Олег": {
         "photo": "media/oleg.jpg",
         "video": "media/oleg.mp4",
-        "description": "\ud83e\uddc4 \u041e\u043b\u0435\u0433 \u2014 \u044d\u043a\u0441\u043f\u0435\u0440\u0442 \u043f\u043e \u0443\u0445\u043e\u0434\u0443 \u0437\u0430 \u0431\u043e\u0440\u043e\u0434\u043e\u0439."
+        "description": "🧔 Олег — эксперт по уходу за бородой."
     }
 }
 
@@ -71,7 +71,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_state[user_id] = {"booking": None, "step": None}
     await update.message.reply_text(
-        "\u0414\u043e\u0431\u0440\u043e \u043f\u043e\u0436\u0430\u043b\u043e\u0432\u0430\u0442\u044c \u0432 BarberBot \ud83d\udcbc",
+        "Добро пожаловать в BarberBot 💈",
         reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
     )
 
@@ -79,24 +79,24 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = update.effective_user.id
 
-    if text == "\ud83d\udcbc \u0417\u0430\u043f\u0438\u0441\u0430\u0442\u044c\u0441\u044f \u043d\u0430 \u0441\u0442\u0440\u0438\u0436\u043a\u0443":
+    if text == "💈 Записаться на стрижку":
         user_state[user_id] = {"step": "choose_barber"}
         await update.message.reply_text(
-            "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0431\u0430\u0440\u0431\u0435\u0440\u0430:",
+            "Выберите барбера:",
             reply_markup=ReplyKeyboardMarkup([[b] for b in BARBERS.keys()], resize_keyboard=True)
         )
 
     elif text in BARBERS and user_state.get(user_id, {}).get("step") == "choose_barber":
         user_state[user_id]["barber"] = text
         user_state[user_id]["step"] = "type_name"
-        await update.message.reply_text("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0432\u0430\u0448\u0435 \u0438\u043c\u044f:", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("Введите ваше имя:", reply_markup=ReplyKeyboardRemove())
 
     elif user_state.get(user_id, {}).get("step") == "type_name":
         user_state[user_id]["name"] = text
         user_state[user_id]["step"] = "choose_date"
         dates = get_upcoming_dates()
         await update.message.reply_text(
-            "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0430\u0442\u0443:",
+            "Выберите дату:",
             reply_markup=ReplyKeyboardMarkup([[d] for d in dates], resize_keyboard=True)
         )
 
@@ -104,14 +104,14 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_state[user_id]["date"] = text
         user_state[user_id]["step"] = "choose_time"
         await update.message.reply_text(
-            "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0432\u0440\u0435\u043c\u044f:",
+            "Выберите время:",
             reply_markup=ReplyKeyboardMarkup([[t] for t in TIME_OPTIONS], resize_keyboard=True)
         )
 
     elif text in TIME_OPTIONS and user_state.get(user_id, {}).get("step") == "choose_time":
         user_state[user_id]["time"] = text
         user_state[user_id]["step"] = "type_phone"
-        await update.message.reply_text("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043b\u0435\u0444\u043e\u043d (555 888888):", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("Введите телефон (555 888888):", reply_markup=ReplyKeyboardRemove())
 
     elif user_state.get(user_id, {}).get("step") == "type_phone":
         phone_parts = text.split()
@@ -119,7 +119,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_state[user_id]["phone"] = text
             d = user_state[user_id]
             await update.message.reply_text(
-                f"\u2705 \u0417\u0430\u043f\u0438\u0441\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430!\n\n\u0411\u0430\u0440\u0431\u0435\u0440: {d['barber']}\n\u0418\u043c\u044f: {d['name']}\n\u0414\u0430\u0442\u0430: {d['date']}\n\u0412\u0440\u0435\u043c\u044f: {d['time']}\n\u0422\u0435\u043b\u0435\u0444\u043e\u043d: {d['phone']}\n\n\u0414\u043e \u0432\u0441\u0442\u0440\u0435\u0447\u0438! \ud83d\udcbc",
+                f"✅ Запись подтверждена!\n\nБарбер: {d['barber']}\nИмя: {d['name']}\nДата: {d['date']}\nВремя: {d['time']}\nТелефон: {d['phone']}\n\nДо встречи! 💈",
                 reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
             )
             async with db_pool.acquire() as conn:
@@ -129,12 +129,12 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 """, user_id, d['barber'], d['name'], d['date'], d['time'], d['phone'])
             user_state[user_id] = {"step": None}
         else:
-            await update.message.reply_text("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u0444\u043e\u0440\u043c\u0430\u0442. \u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0430\u043a: 555 888888")
+            await update.message.reply_text("Неверный формат. Введите так: 555 888888")
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in ADMIN_IDS:
-        await update.message.reply_text("\u26d4\ufe0f \u0423 \u0432\u0430\u0441 \u043d\u0435\u0442 \u0434\u043e\u0441\u0442\u0443\u043f\u0430 \u043a \u0430\u0434\u043c\u0438\u043d-\u043f\u0430\u043d\u0435\u043b\u0438.")
+        await update.message.reply_text("⛔ У вас нет доступа к админ-панели.")
         return
 
     today = datetime.now().date()
@@ -147,16 +147,16 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """, today, today + timedelta(days=14))
 
     if not rows:
-        await update.message.reply_text("\u0417\u0430\u043f\u0438\u0441\u0435\u0439 \u043d\u0435\u0442.")
+        await update.message.reply_text("Записей нет.")
     else:
-        message = "\ud83d\udccb \u0417\u0430\u043f\u0438\u0441\u0438:\n\n"
+        message = "📋 Записи:\n\n"
         for row in rows:
             message += (
-                f"\u0411\u0430\u0440\u0431\u0435\u0440: {row['barber']}\n"
-                f"\u0418\u043c\u044f: {row['name']}\n"
-                f"\u0414\u0430\u0442\u0430: {row['date']}\n"
-                f"\u0412\u0440\u0435\u043c\u044f: {row['time']}\n"
-                f"\u0422\u0435\u043b\u0435\u0444\u043e\u043d: {row['phone']}\n\n"
+                f"Барбер: {row['barber']}\n"
+                f"Имя: {row['name']}\n"
+                f"Дата: {row['date']}\n"
+                f"Время: {row['time']}\n"
+                f"Телефон: {row['phone']}\n\n"
             )
         await update.message.reply_text(message)
 
