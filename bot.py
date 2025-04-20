@@ -133,6 +133,12 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"✅ Запись подтверждена!\nБарбер: {d['barber']}\nИмя: {d['name']}\nДата: {d['date']}\nВремя: {d['time']}\nТелефон: {d['phone']}\n\nДо встречи! 💈",
                 reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
             )
+            # Сохраняем запись в базу данных
+            async with db_pool.acquire() as conn:
+                await conn.execute("""
+                    INSERT INTO appointments (user_id, barber, name, date, time, phone)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                """, user_id, d['barber'], d['name'], d['date'], d['time'], d['phone'])
             user_state[user_id] = {"step": None}
         else:
             await update.message.reply_text(
