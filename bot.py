@@ -293,7 +293,17 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📞 Телефон: {row['phone']}\n\n"
             )
         await update.message.reply_text(message)
+# Команда для удаления всех записей
+async def clear_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ У вас нет доступа к этой команде.")
+        return
 
+    async with db_pool.acquire() as conn:
+        await conn.execute("DELETE FROM appointments;")
+
+    await update.message.reply_text("✅ Все записи удалены.")
 # Запуск бота
 async def on_startup(app):
     await init_db()
@@ -302,6 +312,7 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(on_startup).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
+    app.add_handler(CommandHandler("clear", clear_appointments))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_menu))
     app.run_polling()
 
