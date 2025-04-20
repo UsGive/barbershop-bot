@@ -1,4 +1,5 @@
 import os
+import asyncpg
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputMediaPhoto, ReplyKeyboardRemove
@@ -7,6 +8,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Con
 # Загрузка токена из .env
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Главное меню
 MAIN_MENU = [
@@ -41,10 +43,32 @@ TIME_OPTIONS = ["10:00", "11:00", "12:00", "13:00", "14:00"]
 # Состояния пользователя
 user_state = {}
 
+# Пул подключений к базе данных
+db_pool = None
+
 # Функция для генерации списка ближайших 14 дней
 def get_upcoming_dates(n_days=14):
     today = datetime.now()
     return [(today + timedelta(days=i)).strftime("%d.%m.%Y") for i in range(n_days)]
+
+# Инициализация базы данных
+async def init_db():
+    global db_pool
+    db_pool = await asyncpg.create_pool(DATABASE_URL)
+
+    async with db_pool.acquire() as conn:
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS appointments (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            barber TEXT,
+            name TEXT,
+            date TEXT,
+            time TEXT,
+            phone TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+        """)
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -109,7 +133,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"✅ Запись подтверждена!\nБарбер: {d['barber']}\nИмя: {d['name']}\nДата: {d['date']}\nВремя: {d['time']}\nТелефон: {d['phone']}\n\nДо встречи! 💈",
                 reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
             )
-            user_state[user_id] = {"step": None}  # сброс
+            user_state[user_id] = {"step": None}
         else:
             await update.message.reply_text(
                 "Пожалуйста, введите номер в правильном формате (555 888888):"
@@ -158,8 +182,11 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 # Запуск бота
+async def on_startup(app):
+    await init_db()
+
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(on_startup).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_menu))
     app.run_polling()
