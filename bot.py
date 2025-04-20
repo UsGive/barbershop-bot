@@ -43,6 +43,9 @@ TIME_OPTIONS = ["10:00", "11:00", "12:00", "13:00", "14:00"]
 # Состояния пользователя
 user_state = {}
 
+# ID администраторов
+ADMIN_IDS = [817664298]  # <-- сюда вставь свой Telegram user_id
+
 # Пул подключений к базе данных
 db_pool = None
 
@@ -186,6 +189,35 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Пожалуйста, выберите вариант из меню.",
             reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
         )
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ У вас нет доступа к админ-панели.")
+        return
+
+    today = datetime.now().date()
+
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT barber, name, date, time, phone
+            FROM appointments
+            WHERE to_date(date, 'DD.MM.YYYY') BETWEEN $1 AND $2
+            ORDER BY to_date(date, 'DD.MM.YYYY'), time
+        """, today, today + timedelta(days=14))
+
+    if not rows:
+        await update.message.reply_text("Записей на ближайшие 14 дней нет.")
+    else:
+        message = "📋 Записи на ближайшие 14 дней:\n\n"
+        for row in rows:
+            message += (
+                f"👤 Имя: {row['name']}\n"
+                f"💈 Барбер: {row['barber']}\n"
+                f"📅 Дата: {row['date']}\n"
+                f"⏰ Время: {row['time']}\n"
+                f"📞 Телефон: {row['phone']}\n\n"
+            )
+        await update.message.reply_text(message)
 
 # Запуск бота
 async def on_startup(app):
@@ -194,6 +226,7 @@ async def on_startup(app):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(on_startup).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_menu))
     app.run_polling()
 
