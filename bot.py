@@ -17,7 +17,6 @@ MAIN_MENU = [
     [KeyboardButton("💼 Услуги и цены")],
     [KeyboardButton("📍 Адрес и контакты")]
 ]
-
 # Варианты барберов и их профили
 BARBERS = {
     "Ира": {
@@ -36,7 +35,6 @@ BARBERS = {
         "description": "🧔 Олег — эксперт по уходу за бородой и коротким стрижкам. Более 6 лет опыта. Работает быстро и качественно."
     }
 }
-
 # Варианты времени
 TIME_OPTIONS = ["10:00", "11:00", "12:00", "13:00", "14:00"]
 
@@ -72,6 +70,16 @@ async def init_db():
             created_at TIMESTAMP DEFAULT NOW()
         );
         """)
+# Получение доступного времени для барбера на дату
+async def get_available_times(barber, date):
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT time FROM appointments
+            WHERE barber = $1 AND date = $2
+        """, barber, date)
+    booked_times = {row['time'] for row in rows}
+    available_times = [time for time in TIME_OPTIONS if time not in booked_times]
+    return available_times
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -111,21 +119,88 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardMarkup([[d] for d in dates], resize_keyboard=True)
         )
 
-    elif user_state.get(user_id, {}).get("step") == "type_date":
-        user_state[user_id]["date"] = text
-        user_state[user_id]["step"] = "choose_time"
-        await update.message.reply_text(
-            "Выберите время:",
-            reply_markup=ReplyKeyboardMarkup([[t] for t in TIME_OPTIONS], resize_keyboard=True)
-        )
 
-    elif text in TIME_OPTIONS and user_state.get(user_id, {}).get("step") == "choose_time":
-        user_state[user_id]["time"] = text
-        user_state[user_id]["step"] = "type_phone"
-        await update.message.reply_text(
-            "Введите ваш номер телефона (в формате 555 888888):",
-            reply_markup=ReplyKeyboardRemove()
-        )
+    elif user_state.get(user_id, {}).get("step") == "type_date":
+
+        user_state[user_id]["date"] = text
+
+        user_state[user_id]["step"] = "choose_time"
+
+        available_times = await get_available_times(user_state[user_id]["barber"], text)
+
+        if not available_times:
+
+            await update.message.reply_text(
+                "❗ На эту дату уже нет свободного времени. Пожалуйста, выберите другую дату.")
+
+            dates = get_upcoming_dates()
+
+            await update.message.reply_text(
+
+                "Выберите дату записи:",
+
+                reply_markup=ReplyKeyboardMarkup([[d] for d in dates], resize_keyboard=True)
+
+            )
+
+        else:
+
+            await update.message.reply_text(
+
+                "Выберите время:",
+
+                reply_markup=ReplyKeyboardMarkup([[t] for t in available_times], resize_keyboard=True)
+
+            )
+
+
+    elif user_state.get(user_id, {}).get("step") == "choose_time":
+
+        available_times = await get_available_times(user_state[user_id]["barber"], user_state[user_id]["date"])
+
+        if text in available_times:
+
+            user_state[user_id]["time"] = text
+
+            user_state[user_id]["step"] = "type_phone"
+
+            await update.message.reply_text(
+
+                "Введите ваш номер телефона (в формате 555 888888):",
+
+                reply_markup=ReplyKeyboardRemove()
+
+            )
+
+        else:
+
+            if available_times:
+
+                await update.message.reply_text(
+
+                    "❗ Это время уже занято. Пожалуйста, выберите другое:",
+
+                    reply_markup=ReplyKeyboardMarkup([[t] for t in available_times], resize_keyboard=True)
+
+                )
+
+            else:
+
+                await update.message.reply_text(
+
+                    "❗ На эту дату нет свободного времени. Пожалуйста, выберите другую дату."
+
+                )
+
+                dates = get_upcoming_dates()
+
+                await update.message.reply_text(
+
+                    "Выберите дату записи:",
+
+                    reply_markup=ReplyKeyboardMarkup([[d] for d in dates], resize_keyboard=True)
+
+                )
 
     elif user_state.get(user_id, {}).get("step") == "type_phone":
         phone_parts = text.split()
