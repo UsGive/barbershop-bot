@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputMediaPhoto
+from datetime import datetime, timedelta
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputMediaPhoto, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 # Загрузка токена из .env
@@ -40,6 +41,11 @@ TIME_OPTIONS = ["10:00", "11:00", "12:00", "13:00", "14:00"]
 # Состояния пользователя
 user_state = {}
 
+# Функция для генерации списка ближайших 14 дней
+def get_upcoming_dates(n_days=14):
+    today = datetime.now()
+    return [(today + timedelta(days=i)).strftime("%d.%m.%Y") for i in range(n_days)]
+
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -64,12 +70,19 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text in BARBERS and user_state.get(user_id, {}).get("step") == "choose_barber":
         user_state[user_id]["barber"] = text
         user_state[user_id]["step"] = "type_name"
-        await update.message.reply_text("Введите ваше имя:")
+        await update.message.reply_text(
+            "Введите ваше имя:",
+            reply_markup=ReplyKeyboardRemove()
+        )
 
     elif user_state.get(user_id, {}).get("step") == "type_name":
         user_state[user_id]["name"] = text
         user_state[user_id]["step"] = "type_date"
-        await update.message.reply_text("Введите дату записи (например, 15 апреля):")
+        dates = get_upcoming_dates()
+        await update.message.reply_text(
+            "Выберите дату записи:",
+            reply_markup=ReplyKeyboardMarkup([[d] for d in dates], resize_keyboard=True)
+        )
 
     elif user_state.get(user_id, {}).get("step") == "type_date":
         user_state[user_id]["date"] = text
@@ -82,10 +95,14 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text in TIME_OPTIONS and user_state.get(user_id, {}).get("step") == "choose_time":
         user_state[user_id]["time"] = text
         user_state[user_id]["step"] = "type_phone"
-        await update.message.reply_text("Введите ваш номер телефона (в формате 555 78 22 33):")
+        await update.message.reply_text(
+            "Введите ваш номер телефона (в формате 555 888888):",
+            reply_markup=ReplyKeyboardRemove()
+        )
 
     elif user_state.get(user_id, {}).get("step") == "type_phone":
-        if len(text.split()) == 4 and all(part.isdigit() for part in text.split()):
+        phone_parts = text.split()
+        if len(phone_parts) == 2 and all(part.isdigit() for part in phone_parts) and len(phone_parts[0]) == 3 and len(phone_parts[1]) == 6:
             user_state[user_id]["phone"] = text
             d = user_state[user_id]
             await update.message.reply_text(
@@ -94,7 +111,9 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             user_state[user_id] = {"step": None}  # сброс
         else:
-            await update.message.reply_text("Пожалуйста, введите номер в правильном формате (555 78 22 33):")
+            await update.message.reply_text(
+                "Пожалуйста, введите номер в правильном формате (555 888888):"
+            )
 
     elif text == "🧔 Наши барберы":
         await update.message.reply_text(
@@ -111,10 +130,16 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_video(video=video_file)
         except Exception as e:
             await update.message.reply_text(f"Ошибка при загрузке медиа: {e}")
-        await update.message.reply_text("⬅️ Вернуться в меню", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
+        await update.message.reply_text(
+            "⬅️ Вернуться в меню",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+        )
 
     elif text == "⬅️ Вернуться в меню":
-        await update.message.reply_text("Главное меню:", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
+        await update.message.reply_text(
+            "Главное меню:",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+        )
 
     elif text == "💼 Услуги и цены":
         await update.message.reply_text(
@@ -127,7 +152,10 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     else:
-        await update.message.reply_text("Пожалуйста, выберите вариант из меню.", reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True))
+        await update.message.reply_text(
+            "Пожалуйста, выберите вариант из меню.",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+        )
 
 # Запуск бота
 def main():
@@ -138,5 +166,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
