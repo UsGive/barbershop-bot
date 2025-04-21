@@ -1,67 +1,93 @@
-# Новый код для Бот BarberBot на инлайн-кнопках
-
 import os
 import asyncpg
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputMediaPhoto, ReplyKeyboardRemove
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-# Загрузка токенов
+# Загрузка токена из .env
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Барберы
+# Главное меню
+MAIN_MENU = [
+    [KeyboardButton("💈 Записаться на стрижку")],
+    [KeyboardButton("🧔 Наши барберы")],
+    [KeyboardButton("💼 Услуги и цены")],
+    [KeyboardButton("📍 Адрес и контакты")]
+]
+# Варианты барберов и их профили
 BARBERS = {
-    "Ира": "media/ira.jpg",
-    "Аман": "media/aman.jpg",
-    "Олег": "media/oleg.jpg"
+    "Ира": {
+        "photo": "media/ira.jpg",
+        "video": "media/ira.mp4",
+        "description": "✂️ Ира — специалист по классическим мужским и женским стрижкам. 5 лет опыта, внимательная к деталям и вежливая."
+    },
+    "Аман": {
+        "photo": "media/aman.jpg",
+        "video": "media/aman.mp4",
+        "description": "💈 Аман — мастер фейдов и современных укладок. 4 года в профессии, стильный и профессиональный."
+    },
+    "Олег": {
+        "photo": "media/oleg.jpg",
+        "video": "media/oleg.mp4",
+        "description": "🧔 Олег — эксперт по уходу за бородой и коротким стрижкам. Более 6 лет опыта. Работает быстро и качественно."
+    }
 }
-
-# Время
+# Варианты времени
 TIME_OPTIONS = ["10:00", "11:00", "12:00", "13:00", "14:00"]
 
-# Состояние пользователя
+# Состояния пользователя
 user_state = {}
 
-# Пул базы
+# ID администраторов
+ADMIN_IDS = [817664298]  # <-- сюда вставь свой Telegram user_id
+
+# Пул подключений к базе данных
 db_pool = None
 
-# Получение дат
+# Функция для генерации списка ближайших 14 дней
 def get_upcoming_dates(n_days=14):
     today = datetime.now()
     return [(today + timedelta(days=i)).strftime("%d.%m.%Y") for i in range(n_days)]
 
-# Инициализация базы
+# Инициализация базы данных
 async def init_db():
     global db_pool
     db_pool = await asyncpg.create_pool(DATABASE_URL)
+
     async with db_pool.acquire() as conn:
         await conn.execute("""
-            CREATE TABLE IF NOT EXISTS appointments (
-                id SERIAL PRIMARY KEY,
-                user_id BIGINT,
-                barber TEXT,
-                name TEXT,
-                date TEXT,
-                time TEXT,
-                phone TEXT,
-                created_at TIMESTAMP DEFAULT NOW()
-            );
+        CREATE TABLE IF NOT EXISTS appointments (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            barber TEXT,
+            name TEXT,
+            date TEXT,
+            time TEXT,
+            phone TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
         """)
+# Получение доступного времени для барбера на дату
+async def get_available_times(barber, date):
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT time FROM appointments
+            WHERE barber = $1 AND date = $2
+        """, barber, date)
+    booked_times = {row['time'] for row in rows}
+    available_times = [time for time in TIME_OPTIONS if time not in booked_times]
+    return available_times
 
-# Старт
+# Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_state[user_id] = {"step": None}
-
+    user_state[user_id] = {"booking": None, "step": None}
     await update.message.reply_text(
-        "Добро пожаловать в BarberBot 💈\n\nНажмите на кнопку, чтобы начать:",
-        reply_markup=ReplyKeyboardMarkup([
-            ["💈 Записаться на стрижку"],
-            ["💼 Услуги и цены", "📍 Адрес и контакты"]
-        ], resize_keyboard=True)
+        "Добро пожаловать в BarberBot 💈",
+        reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
     )
 
 # Обработка текстовых сообщений
@@ -70,12 +96,157 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if text == "💈 Записаться на стрижку":
-        keyboard = [
-            [InlineKeyboardButton(name, callback_data=f"barber:{name}")] for name in BARBERS.keys()
-        ]
+        user_state[user_id] = {"step": "choose_barber"}
         await update.message.reply_text(
             "Выберите барбера:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            reply_markup=ReplyKeyboardMarkup([[b] for b in BARBERS.keys()], resize_keyboard=True)
+        )
+
+    elif text in BARBERS and user_state.get(user_id, {}).get("step") == "choose_barber":
+        user_state[user_id]["barber"] = text
+        user_state[user_id]["step"] = "type_name"
+        await update.message.reply_text(
+            "Введите ваше имя:",
+            reply_markup=ReplyKeyboardRemove()
+        )
+
+    elif user_state.get(user_id, {}).get("step") == "type_name":
+        user_state[user_id]["name"] = text
+        user_state[user_id]["step"] = "type_date"
+        dates = get_upcoming_dates()
+        await update.message.reply_text(
+            "Выберите дату записи:",
+            reply_markup=ReplyKeyboardMarkup([[d] for d in dates], resize_keyboard=True)
+        )
+
+
+    elif user_state.get(user_id, {}).get("step") == "type_date":
+
+        user_state[user_id]["date"] = text
+
+        user_state[user_id]["step"] = "choose_time"
+
+        available_times = await get_available_times(user_state[user_id]["barber"], text)
+
+        if not available_times:
+
+            await update.message.reply_text(
+                "❗ На эту дату уже нет свободного времени. Пожалуйста, выберите другую дату.")
+
+            dates = get_upcoming_dates()
+
+            await update.message.reply_text(
+
+                "Выберите дату записи:",
+
+                reply_markup=ReplyKeyboardMarkup([[d] for d in dates], resize_keyboard=True)
+
+            )
+
+        else:
+
+            await update.message.reply_text(
+
+                "Выберите время:",
+
+                reply_markup=ReplyKeyboardMarkup([[t] for t in available_times], resize_keyboard=True)
+
+            )
+
+
+    elif user_state.get(user_id, {}).get("step") == "choose_time":
+
+        available_times = await get_available_times(user_state[user_id]["barber"], user_state[user_id]["date"])
+
+        if text in available_times:
+
+            user_state[user_id]["time"] = text
+
+            user_state[user_id]["step"] = "type_phone"
+
+            await update.message.reply_text(
+
+                "Введите ваш номер телефона (в формате 555 888888):",
+
+                reply_markup=ReplyKeyboardRemove()
+
+            )
+
+        else:
+
+            if available_times:
+
+                await update.message.reply_text(
+
+                    "❗ Это время уже занято. Пожалуйста, выберите другое:",
+
+                    reply_markup=ReplyKeyboardMarkup([[t] for t in available_times], resize_keyboard=True)
+
+                )
+
+            else:
+
+                await update.message.reply_text(
+
+                    "❗ На эту дату нет свободного времени. Пожалуйста, выберите другую дату."
+
+                )
+
+                dates = get_upcoming_dates()
+
+                await update.message.reply_text(
+
+                    "Выберите дату записи:",
+
+                    reply_markup=ReplyKeyboardMarkup([[d] for d in dates], resize_keyboard=True)
+
+                )
+
+    elif user_state.get(user_id, {}).get("step") == "type_phone":
+        phone_parts = text.split()
+        if len(phone_parts) == 2 and all(part.isdigit() for part in phone_parts) and len(phone_parts[0]) == 3 and len(phone_parts[1]) == 6:
+            user_state[user_id]["phone"] = text
+            d = user_state[user_id]
+            await update.message.reply_text(
+                f"✅ Запись подтверждена!\nБарбер: {d['barber']}\nИмя: {d['name']}\nДата: {d['date']}\nВремя: {d['time']}\nТелефон: {d['phone']}\n\nДо встречи! 💈",
+                reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+            )
+            # Сохраняем запись в базу данных
+            async with db_pool.acquire() as conn:
+                await conn.execute("""
+                    INSERT INTO appointments (user_id, barber, name, date, time, phone)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                """, user_id, d['barber'], d['name'], d['date'], d['time'], d['phone'])
+            user_state[user_id] = {"step": None}
+        else:
+            await update.message.reply_text(
+                "Пожалуйста, введите номер в правильном формате (555 888888):"
+            )
+
+    elif text == "🧔 Наши барберы":
+        await update.message.reply_text(
+            "Выберите барбера:",
+            reply_markup=ReplyKeyboardMarkup([[name] for name in BARBERS.keys()] + [["⬅️ Вернуться в меню"]], resize_keyboard=True)
+        )
+
+    elif text in BARBERS:
+        barber = BARBERS[text]
+        try:
+            with open(barber["photo"], "rb") as photo_file:
+                await update.message.reply_photo(photo=photo_file, caption=barber["description"])
+            with open(barber["video"], "rb") as video_file:
+                await update.message.reply_video(video=video_file)
+        except Exception as e:
+            await update.message.reply_text(f"Ошибка при загрузке медиа: {e}")
+        await update.message.reply_text(
+            "⬅️ Вернуться в меню",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+        )
+
+    elif text == "⬅️ Вернуться в меню":
+        await update.message.reply_text(
+            "Главное меню:",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
         )
 
     elif text == "💼 Услуги и цены":
@@ -88,101 +259,63 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📍 ул. Барберская, 123\n📞 +996 (555) 23-45-67\n🕒 Режим работы: 10:00 – 20:00"
         )
 
-# Получение доступного времени
-async def get_available_times(barber, date):
-    async with db_pool.acquire() as conn:
-        rows = await conn.fetch("""
-            SELECT time FROM appointments WHERE barber = $1 AND date = $2
-        """, barber, date)
-    booked = {row['time'] for row in rows}
-    return [time for time in TIME_OPTIONS if time not in booked]
-
-# Обработка инлайн кнопок
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-    data = query.data
-
-    if data.startswith("barber:"):
-        barber = data.split(":")[1]
-        user_state[user_id] = {"barber": barber, "step": "choose_date"}
-
-        dates = get_upcoming_dates()
-        keyboard = [[InlineKeyboardButton(date, callback_data=f"date:{date}")] for date in dates]
-
-        await query.message.edit_text(
-            f"Вы выбрали барбера: {barber}\nВыберите дату:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+    else:
+        await update.message.reply_text(
+            "Пожалуйста, выберите вариант из меню.",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
         )
-
-    elif data.startswith("date:"):
-        date = data.split(":")[1]
-        user_state[user_id]["date"] = date
-        user_state[user_id]["step"] = "choose_time"
-
-        available_times = await get_available_times(user_state[user_id]["barber"], date)
-        if not available_times:
-            await query.message.edit_text("❗ На эту дату нет свободного времени. Нажмите /start, чтобы выбрать другую дату.")
-            return
-
-        keyboard = [[InlineKeyboardButton(time, callback_data=f"time:{time}")] for time in available_times]
-        await query.message.edit_text(
-            f"Вы выбрали дату: {date}\nТеперь выберите время:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-
-    elif data.startswith("time:"):
-        time = data.split(":")[1]
-        user_state[user_id]["time"] = time
-        user_state[user_id]["step"] = "type_phone"
-
-        await query.message.edit_text(
-            f"Вы выбрали время: {time}\nВведите ваш номер телефона (формат 555 888888):"
-        )
-
-# Обработка ввода телефона и сохранение записи
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-
-    if user_id not in user_state:
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ У вас нет доступа к админ-панели.")
         return
 
-    step = user_state[user_id].get("step")
-    if step == "type_phone":
-        if text.replace(" ", "").isdigit() and len(text.replace(" ", "")) == 9:
-            user_state[user_id]["phone"] = text
-            d = user_state[user_id]
+    today = datetime.now().date()
 
-            async with db_pool.acquire() as conn:
-                await conn.execute("""
-                    INSERT INTO appointments (user_id, barber, name, date, time, phone)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                """, user_id, d["barber"], update.effective_user.first_name, d["date"], d["time"], d["phone"])
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT barber, name, date, time, phone
+            FROM appointments
+            WHERE to_date(date, 'DD.MM.YYYY') BETWEEN $1 AND $2
+            ORDER BY to_date(date, 'DD.MM.YYYY'), time
+        """, today, today + timedelta(days=14))
 
-            await update.message.reply_text(
-                f"✅ Запись подтверждена!\nБарбер: {d['barber']}\nДата: {d['date']}\nВремя: {d['time']}\nТелефон: {d['phone']}\n\nСпасибо! 💈",
-                reply_markup=ReplyKeyboardMarkup([
-                    ["💈 Записаться на стрижку"],
-                    ["💼 Услуги и цены", "📍 Адрес и контакты"]
-                ], resize_keyboard=True)
+    if not rows:
+        await update.message.reply_text("Записей на ближайшие 14 дней нет.")
+    else:
+        message = "📋 Записи на ближайшие 14 дней:\n\n"
+        for row in rows:
+            message += (
+                f"👤 Имя: {row['name']}\n"
+                f"💈 Барбер: {row['barber']}\n"
+                f"📅 Дата: {row['date']}\n"
+                f"⏰ Время: {row['time']}\n"
+                f"📞 Телефон: {row['phone']}\n\n"
             )
-            user_state.pop(user_id)
-        else:
-            await update.message.reply_text("❗ Неверный формат номера. Пожалуйста, введите номер в формате 555 888888.")
+        await update.message.reply_text(message)
+# Команда для удаления всех записей
+async def clear_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ У вас нет доступа к этой команде.")
+        return
 
-# Основная функция
+    async with db_pool.acquire() as conn:
+        await conn.execute("DELETE FROM appointments;")
+
+    await update.message.reply_text("✅ Все записи удалены.")
+# Запуск бота
 async def on_startup(app):
     await init_db()
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(on_startup).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(handle_callback))
+    app.add_handler(CommandHandler("admin", admin_panel))
+    app.add_handler(CommandHandler("clear", clear_appointments))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_menu))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text))
     app.run_polling()
 
 if __name__ == "__main__":
     main()
+
