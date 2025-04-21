@@ -2,8 +2,8 @@ import os
 import asyncpg
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputMediaPhoto, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputMediaPhoto, ReplyKeyboardRemove
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 # Загрузка токена из .env
 load_dotenv()
@@ -97,16 +97,9 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "💈 Записаться на стрижку":
         user_state[user_id] = {"step": "choose_barber"}
-
-        keyboard = [
-            [InlineKeyboardButton(name, callback_data=f"barber:{name}")]
-            for name in BARBERS.keys()
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
         await update.message.reply_text(
             "Выберите барбера:",
-            reply_markup=reply_markup
+            reply_markup=ReplyKeyboardMarkup([[b] for b in BARBERS.keys()], resize_keyboard=True)
         )
 
     elif text in BARBERS and user_state.get(user_id, {}).get("step") == "choose_barber":
@@ -300,7 +293,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📞 Телефон: {row['phone']}\n\n"
             )
         await update.message.reply_text(message)
-
 # Команда для удаления всех записей
 async def clear_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -312,67 +304,6 @@ async def clear_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await conn.execute("DELETE FROM appointments;")
 
     await update.message.reply_text("✅ Все записи удалены.")
-
-# Обработка выбора через инлайн-кнопки
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-
-    data = query.data
-
-    # Выбор барбера
-    if data.startswith("barber:"):
-        barber_name = data.split(":")[1]
-        user_state[user_id] = {
-            "barber": barber_name,
-            "step": "choose_date"
-        }
-
-        dates = get_upcoming_dates()
-        keyboard = [
-            [InlineKeyboardButton(date, callback_data=f"date:{date}")]
-            for date in dates
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await query.message.edit_text(
-            f"Вы выбрали барбера: {barber_name}\nТеперь выберите дату:",
-            reply_markup=reply_markup
-        )
-
-    # Выбор даты
-    elif data.startswith("date:"):
-        date_chosen = data.split(":")[1]
-        user_state[user_id]["date"] = date_chosen
-        user_state[user_id]["step"] = "choose_time"
-
-        available_times = await get_available_times(user_state[user_id]["barber"], date_chosen)
-
-        if not available_times:
-            await query.message.edit_text("❗ На эту дату нет свободного времени. Выберите другую дату через /start")
-            return
-
-        keyboard = [
-            [InlineKeyboardButton(time, callback_data=f"time:{time}")]
-            for time in available_times
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await query.message.edit_text(
-            f"Вы выбрали дату: {date_chosen}\nТеперь выберите время:",
-            reply_markup=reply_markup
-        )
-
-    # Выбор времени
-    elif data.startswith("time:"):
-        time_chosen = data.split(":")[1]
-        user_state[user_id]["time"] = time_chosen
-        user_state[user_id]["step"] = "type_phone"
-
-        await query.message.edit_text(
-            f"Вы выбрали время: {time_chosen}\nПожалуйста, введите ваш номер телефона (в формате 555 888888):"
-        )
 # Запуск бота
 async def on_startup(app):
     await init_db()
@@ -382,9 +313,9 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(CommandHandler("clear", clear_appointments))
-    app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_menu))
     app.run_polling()
 
 if __name__ == "__main__":
     main()
+
