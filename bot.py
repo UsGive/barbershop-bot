@@ -119,7 +119,6 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardMarkup([[d] for d in dates], resize_keyboard=True)
         )
 
-
     elif user_state.get(user_id, {}).get("step") == "type_date":
 
         user_state[user_id]["date"] = text
@@ -152,7 +151,6 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=ReplyKeyboardMarkup([[t] for t in available_times], resize_keyboard=True)
 
             )
-
 
     elif user_state.get(user_id, {}).get("step") == "choose_time":
 
@@ -251,7 +249,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif text == "💼 Услуги и цены":
         await update.message.reply_text(
-            "💇 Стрижка – 700\n🧔 Оформление бороды – 500\n💆 Полный комплекс – 1100"
+            "💇 Стрижка – 1300\n🧔 Оформление бороды – 600\n💆 Полный комплекс – 1500"
         )
 
     elif text == "📍 Адрес и контакты":
